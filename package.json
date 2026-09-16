@@ -1,0 +1,68 @@
+{
+  "name": "poc-finance-manager",
+  "version": "0.1.0",
+  "description": "Program Capacity & Invoice Reservation service (POC)",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "scripts": {
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "start": "node dist/src/main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
+    "test": "jest -c jest.config.ts",
+    "test:unit": "jest -c jest.config.ts",
+    "test:integration": "jest -c jest.integration.config.ts --runInBand",
+    "test:e2e": "jest -c jest-e2e.config.ts --runInBand",
+    "migrate:up": "ts-node -r tsconfig-paths/register scripts/migrate.ts up",
+    "migrate:down": "ts-node -r tsconfig-paths/register scripts/migrate.ts down"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.2.5",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.2.5",
+    "@nestjs/platform-express": "^11.2.5",
+    "axios": "^1.20.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
+    "envalid": "^8.2.0",
+    "kafkajs": "^2.2.4",
+    "kysely": "^0.28.17",
+    "pg": "^8.23.0",
+    "pg-cursor": "^2.22.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@nestjs/testing": "^11.2.5",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.13.5",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.12.0",
+    "jest": "^30.5.1",
+    "prettier": "^3.9.7",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsc-alias": "^1.9.5",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0"
+  },
+  "overrides": {
+    "multer": "^2.4.0"
+  }
+}
