@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '@app/app.module';
+import { configureApp } from '@app/configure-app';
 import type { Server } from 'node:http';
 
 describe('Health (e2e)', () => {
@@ -14,6 +15,7 @@ describe('Health (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    configureApp(app);
     await app.init();
     httpServer = app.getHttpServer() as Server;
   });

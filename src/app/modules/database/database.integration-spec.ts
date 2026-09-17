@@ -30,7 +30,10 @@ describe('DatabaseModule Postgres integration', () => {
     expect(result.rows[0]?.value).toBe(1);
   });
 
-  it('applies and reverts the pgcrypto bootstrap migration', async () => {
+  it('applies every migration up to the latest', async () => {
+    // Idempotent by design (Kysely only applies pending migrations), so this stays
+    // valid as more migrations accumulate - unlike asserting a specific migrateDown()
+    // target, which would silently start reverting whichever migration is newest.
     const upResult = await migrator.migrateToLatest();
     expect(upResult.error).toBeUndefined();
 
@@ -40,8 +43,5 @@ describe('DatabaseModule Postgres integration', () => {
     expect(generated.rows[0]?.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
-
-    const downResult = await migrator.migrateDown();
-    expect(downResult.error).toBeUndefined();
   });
 });

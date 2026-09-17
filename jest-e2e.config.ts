@@ -10,6 +10,7 @@ const config: Config = {
   },
   testMatch: ['<rootDir>/test/**/*.e2e-spec.ts'],
   setupFiles: ['<rootDir>/test/setup-test-env.ts'],
+  globalSetup: '<rootDir>/test/global-setup.ts',
   testTimeout: 30_000,
 };
 

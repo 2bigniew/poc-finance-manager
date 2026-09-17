@@ -17,3 +17,4 @@ export interface ReservationEventsTable {
   receivedAt: Timestamp;
   processedAt: Timestamp | null;
 }
+

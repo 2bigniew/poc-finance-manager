@@ -1,12 +1,15 @@
 import { registerAs } from '@nestjs/config';
 import { env } from './env';
 
+// This implementation supports HS256 only (SECURITY.md); widen deliberately if that changes.
+export type JwtAlgorithm = 'HS256';
+
 export interface AuthConfig {
   accessTokenSecret: string;
   accessTokenTtl: string;
   refreshTokenSecret: string;
   refreshTokenTtl: string;
-  algorithm: string;
+  algorithm: JwtAlgorithm;
   issuer: string;
   audience: string;
   bcryptRounds: number;

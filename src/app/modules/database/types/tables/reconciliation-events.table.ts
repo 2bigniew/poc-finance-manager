@@ -24,3 +24,4 @@ export interface ReconciliationEventsTable {
   receivedAt: Timestamp;
   processedAt: Timestamp | null;
 }
+

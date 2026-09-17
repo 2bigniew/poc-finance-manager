@@ -5,6 +5,7 @@ import {
   HttpStatus,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Public } from '@app/modules/auth/decorators/public.decorator';
 import { HealthService } from './health.service';
 
 interface HealthStatus {
@@ -16,6 +17,7 @@ interface ReadinessStatus {
   postgres: 'ok';
 }
 
+@Public()
 @Controller()
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}

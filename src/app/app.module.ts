@@ -5,8 +5,10 @@ import authConfig from '@config/auth.config';
 import dbConfig from '@config/db.config';
 import httpConfig from '@config/http.config';
 import kafkaConfig from '@config/kafka.config';
+import { AuthModule } from './modules/auth/auth.module';
 import { BrokerKafkaModule } from './modules/broker-kafka/broker-kafka.module';
 import { DatabaseModule } from './modules/database/database.module';
+import { UsersModule } from './modules/domain/users/users.module';
 import { HealthModule } from './modules/health/health.module';
 import { HttpModule } from './modules/http/http.module';
 
@@ -21,6 +23,8 @@ import { HttpModule } from './modules/http/http.module';
     BrokerKafkaModule.forRootAsync(),
     HttpModule,
     HealthModule,
+    UsersModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
