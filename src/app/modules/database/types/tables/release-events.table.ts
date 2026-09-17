@@ -7,7 +7,9 @@ export interface ReleaseEventsTable {
   externalEventId: string;
   topic: string;
   partition: number;
-  offset: number;
+  // See ReservationEventsTable.offset - kept as a decimal string, backed by `text`, to
+  // avoid the app's global int8->Number parser risking precision loss on 64-bit offsets.
+  offset: string;
   eventType: string;
   // No documented wire schema yet for this flow - kept untrusted rather than guessed.
   payload: ColumnType<unknown, string, string>;

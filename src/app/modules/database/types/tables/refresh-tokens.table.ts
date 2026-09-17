@@ -6,7 +6,10 @@ export interface RefreshTokensTable {
   userId: string;
   tokenHash: string;
   expiresAt: Timestamp;
-  revokedAt: Date | null;
+  // Timestamp's selected/insert/update variants are all `Date`, so this is behaviorally
+  // identical to the previous `Date | null` - just consistent with every other nullable
+  // timestamp column in the schema (e.g. processedAt/publishedAt below).
+  revokedAt: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

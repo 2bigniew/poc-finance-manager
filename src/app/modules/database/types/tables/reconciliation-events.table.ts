@@ -15,7 +15,9 @@ export interface ReconciliationEventsTable {
   externalEventId: string;
   topic: string;
   partition: number;
-  offset: number;
+  // See ReservationEventsTable.offset - kept as a decimal string, backed by `text`, to
+  // avoid the app's global int8->Number parser risking precision loss on 64-bit offsets.
+  offset: string;
   eventType: string;
   payload: JSONColumnType<ReconciliationEventPayload>;
   programId: string;
@@ -24,4 +26,3 @@ export interface ReconciliationEventsTable {
   receivedAt: Timestamp;
   processedAt: Timestamp | null;
 }
-
