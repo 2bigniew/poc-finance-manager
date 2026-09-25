@@ -4,7 +4,9 @@ import { MoneyConversion } from '@app/modules/domain/shared/money/money-conversi
 // Redefined independently of InvoicesTable's InvoiceStatus (database/types) rather than
 // imported from it: domain entities do not depend on persistence types - repositories
 // own that mapping direction (ARCHITECTURE.md).
-export type InvoiceStatus = 'OPEN' | 'RESERVED' | 'REPAID';
+export const INVOICE_STATUSES = ['OPEN', 'RESERVED', 'REPAID'] as const;
+
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
 export interface Invoice {
   id: string;

@@ -16,4 +16,3 @@ export interface ReconciliationsTable {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
-

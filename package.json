@@ -20,7 +20,8 @@
     "test:integration": "jest -c jest.integration.config.ts --runInBand",
     "test:e2e": "jest -c jest-e2e.config.ts --runInBand",
     "migrate:up": "ts-node -r tsconfig-paths/register scripts/migrate.ts up",
-    "migrate:down": "ts-node -r tsconfig-paths/register scripts/migrate.ts down"
+    "migrate:down": "ts-node -r tsconfig-paths/register scripts/migrate.ts down",
+    "validate:local": "ts-node --transpile-only scripts/local-validation/local-validation.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.5",
@@ -29,6 +30,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.2.5",
+    "@nestjs/swagger": "^11.4.7",
     "axios": "^1.20.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",

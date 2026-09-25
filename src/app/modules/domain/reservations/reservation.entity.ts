@@ -4,7 +4,9 @@ import { MoneyConversion } from '@app/modules/domain/shared/money/money-conversi
 // Redefined independently of ReservationsTable's ReservationStatus (database/types)
 // rather than imported from it - domain entities do not depend on persistence types;
 // repositories own that mapping direction (ARCHITECTURE.md).
-export type ReservationStatus = 'ACTIVE' | 'RELEASED';
+export const RESERVATION_STATUSES = ['ACTIVE', 'RELEASED'] as const;
+
+export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
 
 export interface Reservation {
   id: string;

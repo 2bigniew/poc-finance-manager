@@ -16,6 +16,7 @@ Passport + JWT
 bcrypt
 @nestjs/config + envalid
 NestJS Logger
+@nestjs/swagger (OpenAPI documentation only)
 ```
 
 Business rules are defined in `BUSINESS.md`.
@@ -647,6 +648,27 @@ read request.user directly
 ```
 
 All business endpoints MUST be protected by the Auth module unless explicitly marked public by policy.
+
+---
+
+# API Documentation (OpenAPI)
+
+The OpenAPI document is generated at bootstrap from controller/DTO decorators by `@nestjs/swagger` (`src/app/configure-swagger.ts`) and served at `/docs` (Swagger UI) and `/docs-json`. There is no hand-maintained spec file.
+
+Rules:
+
+```text
+Swagger decorators document behavior; they never enforce it
+request DTOs carry both class-validator rules and matching @ApiProperty metadata
+response schemas come from the existing response DTOs
+money amounts are documented as decimal strings (MoneyDto), never numbers
+protected controllers use @ApiAccessTokenAuth(); runtime protection stays the global JwtAccessGuard
+@JwtRefreshAuth() documents the refresh-token body transport
+errors are documented with ApiErrorResponse(status, ...reasons) and ErrorResponseDto
+Kafka-only flows (treasury reconciliation) have no REST documentation
+```
+
+`test/openapi.e2e-spec.ts` asserts the documented operation set equals the implemented routes and that every documented protected operation returns 401 without a token.
 
 ---
 

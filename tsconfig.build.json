@@ -4,5 +4,5 @@
     "rootDir": "./"
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.integration-spec.ts", "**/*.e2e-spec.ts"]
+  "exclude": ["node_modules", "dist", "test", "scripts/local-validation", "**/*.spec.ts", "**/*.integration-spec.ts", "**/*.e2e-spec.ts"]
 }

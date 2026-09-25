@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 // Only `name` is client-mutable. `totalCapacityUsd`/`treasuryVersion` are treasury-owned
@@ -9,6 +10,12 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 // "flag the inconsistency rather than silently expanding client authority" - it is
 // treated the same conservative way rather than assumed mutable.
 export class UpdateProgramDto {
+  @ApiPropertyOptional({
+    type: String,
+    minLength: 1,
+    description: 'The only client-mutable Program field.',
+    example: 'Supplier Finance Program 2026 (renamed)',
+  })
   @IsOptional()
   @IsString()
   @IsNotEmpty()

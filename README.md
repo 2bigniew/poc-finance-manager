@@ -31,6 +31,7 @@ Check readiness:
 ```bash
 curl http://localhost:3000/health      # process liveness
 curl http://localhost:3000/readiness   # process liveness + PostgreSQL reachability
+curl http://localhost:3000/docs   # swagger/openapi
 ```
 
 To reset to a completely clean state (drops all data/volumes):
@@ -149,6 +150,78 @@ e.g. with `kcat`/`kafkacat` or any Kafka client:
 `IGNORED_STALE` and have no effect. Applying a snapshot only ever replaces
 `totalCapacityUsd`/`treasuryVersion` — it never touches Reservations, Releases, or
 Invoices.
+
+## API documentation (Swagger / OpenAPI)
+
+The OpenAPI document is generated from the NestJS controllers and DTOs at startup:
+
+```text
+Swagger UI:    http://localhost:3000/docs
+OpenAPI JSON:  http://localhost:3000/docs-json
+```
+
+Both are always enabled (no environment switch) and are publicly reachable, like `/health`.
+
+1. Start the stack: `docker compose up --build`.
+2. Open http://localhost:3000/docs.
+3. Run **Authentication → POST /users/register** (or **POST /users/login**) and copy
+   `access_token` from the response.
+4. Click **Authorize** and paste the access token (the raw JWT, without `Bearer `).
+5. Invoke protected endpoints, e.g. create a Program, an Invoice, a Reservation, then release it.
+
+`POST /auth/refresh` takes the refresh token in the JSON body (`{"refresh_token": "..."}`), not
+via **Authorize**; access and refresh tokens are not interchangeable. Money amounts are
+decimal strings (`"1000.00"`), never JSON numbers. Treasury reconciliation is Kafka-driven
+(see above) and cannot be executed from Swagger.
+
+## Postman
+
+A ready-to-import Postman collection covers every implemented HTTP endpoint:
+
+```text
+postman/program-capacity.postman_collection.json
+postman/local.postman_environment.json
+```
+
+1. Import both files into Postman.
+2. Select the "Program Capacity - Local" environment.
+3. Start the application with Docker Compose (`docker compose up --build`).
+4. Run **Authentication → Register** first (or **Login** if the demo user already
+   exists) — this stores `accessToken`/`refreshToken` automatically.
+5. Run the remaining requests in folder order (Users, Programs, Invoices,
+   Reservations, Releases); each response automatically stores the ids the next
+   request needs. A **Failure Scenarios** folder demonstrates key invariants
+   (401 without a token, 409 on insufficient capacity/duplicate Reservation,
+   idempotent Release).
+
+Treasury reconciliation is Kafka-driven only and intentionally has no HTTP request in
+the collection — see "Testing the Kafka reconciliation flow" above.
+
+## Local system validation
+
+A black-box runner validates the running Docker Compose stack against its **persistent**
+PostgreSQL/Kafka data (it never deletes volumes, truncates tables, or resets topics or
+consumer groups):
+
+```bash
+npm run validate:local -- --iterations=3            # default: 3 iterations, rebuilds the app image
+npm run validate:local -- --no-build --repo-checks   # also run lint/typecheck/tests/build + rollback integration tests
+```
+
+It starts/builds the stack, runs migrations (twice, to prove re-runs are no-ops), then drives
+real HTTP and Kafka flows: happy path per iteration, auth/refresh rotation, concurrent
+reservations, duplicate releases, duplicate/stale/gap reconciliation, a Kafka outage with
+outbox recovery, FX success/failure, and an application restart. It temporarily stops Kafka
+and recreates/restarts the `app` container, so do not run it while relying on the stack for
+something else.
+
+Every run namespaces its data as `validation-<UTC timestamp>-<suffix>` (emails
+`validation+<runId>@example.com`, Programs `Validation Program <runId>`, invoices
+`VALIDATION-<runId>-*`); data accumulates on purpose. Database assertions are read-only
+`psql` sessions inside the postgres container; diagnostic Kafka consumers use unique
+`validation-observer-<runId>` groups. Reports are written to `reports/` (git-ignored) as
+`local-validation-<timestamp>.md`/`.json` with passwords and tokens redacted. The exit code is
+non-zero if any mandatory scenario does not pass.
 
 ## Outbound events
 

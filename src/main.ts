@@ -5,11 +5,13 @@ import { NestFactory } from '@nestjs/core';
 import { AppConfig } from '@config/app.config';
 import { AppModule } from './app/app.module';
 import { configureApp } from './app/configure-app';
+import { configureSwagger } from './app/configure-swagger';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
   configureApp(app);
+  configureSwagger(app);
 
   const configService = app.get(ConfigService);
   const appConfig = configService.getOrThrow<AppConfig>('app');

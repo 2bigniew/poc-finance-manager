@@ -78,6 +78,7 @@ Passport JWT
 bcrypt
 Jest
 Docker Compose
+@nestjs/swagger    OpenAPI docs only (/docs)
 ```
 
 Do not introduce a second library for an already-owned concern without an intentional architecture change.

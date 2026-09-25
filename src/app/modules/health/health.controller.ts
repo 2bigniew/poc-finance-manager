@@ -5,18 +5,21 @@ import {
   HttpStatus,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiServiceUnavailableResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Public } from '@app/modules/auth/decorators/public.decorator';
+import {
+  HealthStatusDto,
+  ReadinessFailureDto,
+  ReadinessStatusDto,
+} from './dto/health-status.dto';
 import { HealthService } from './health.service';
 
-interface HealthStatus {
-  status: 'ok';
-}
-
-interface ReadinessStatus {
-  status: 'ok';
-  postgres: 'ok';
-}
-
+@ApiTags('Health')
 @Public()
 @Controller()
 export class HealthController {
@@ -24,13 +27,31 @@ export class HealthController {
 
   @Get('health')
   @HttpCode(HttpStatus.OK)
-  checkHealth(): HealthStatus {
+  @ApiOperation({
+    operationId: 'getHealth',
+    summary: 'Liveness check',
+    description:
+      'Reports that the process is up and serving HTTP. Checks no dependencies. Public.',
+  })
+  @ApiOkResponse({ type: HealthStatusDto })
+  checkHealth(): HealthStatusDto {
     return { status: 'ok' };
   }
 
   @Get('readiness')
   @HttpCode(HttpStatus.OK)
-  async checkReadiness(): Promise<ReadinessStatus> {
+  @ApiOperation({
+    operationId: 'getReadiness',
+    summary: 'Readiness check (PostgreSQL)',
+    description:
+      'Runs `select 1` against PostgreSQL. Kafka is not part of this check. Public.',
+  })
+  @ApiOkResponse({ type: ReadinessStatusDto })
+  @ApiServiceUnavailableResponse({
+    type: ReadinessFailureDto,
+    description: 'PostgreSQL is unreachable.',
+  })
+  async checkReadiness(): Promise<ReadinessStatusDto> {
     const isPostgresReady = await this.healthService.isPostgresReady();
     if (!isPostgresReady) {
       throw new ServiceUnavailableException({

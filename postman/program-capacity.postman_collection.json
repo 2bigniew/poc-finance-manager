@@ -1,0 +1,1138 @@
+{
+  "info": {
+    "_postman_id": "697dca02-0f30-45ca-8a88-381324906e0c",
+    "name": "Program Capacity & Invoice Reservation API",
+    "description": "HTTP API for the Program Capacity & Invoice Reservation POC service: Programs, Invoices, Reservations, and Releases, plus JWT authentication and health checks.\n\nTreasury reconciliation is consumed exclusively through Kafka (the `treasury.reconciliation` topic) and is intentionally NOT represented here as an HTTP request — no reconciliation HTTP endpoint exists in this service. See the project README for how to exercise that flow by publishing a Kafka message directly.\n\nWorkflow: Register or Login -> Create Program -> Create Invoice -> Create Reservation -> Get Program (reduced availability) -> Release Reservation -> Get Program (restored availability). Run requests top-to-bottom against the `Local` environment; each request that creates a resource automatically stores its id/token(s) into environment variables consumed by later requests.\n\nAuthorization is configured at the collection level as a Bearer token using `{{accessToken}}`; public routes (register/login/refresh/health/readiness, plus the two negative-auth examples in Failure Scenarios) override this with No Auth.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [],
+  "variable": [],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Process liveness only. Public — no JWT required. Always returns 200 while the Node process is up, independent of PostgreSQL/Kafka availability.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/readiness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "readiness"
+              ]
+            },
+            "description": "Process liveness + PostgreSQL reachability. Public — no JWT required. Returns 200 when PostgreSQL is reachable, 503 otherwise.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is one of [200,503]', function () {\n  pm.expect(pm.response.code).to.be.oneOf([200,503]);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "register"
+              ]
+            },
+            "description": "Public. Creates a User and immediately issues a token pair. Re-running this with the same `userEmail` returns 409 Conflict (duplicate email) — use Login instead once the demo user already exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\n\nif (body.user && body.user.id) {\n  pm.environment.set('userId', body.user.id);\n}\nif (body.access_token) {\n  pm.environment.set('accessToken', body.access_token);\n}\nif (body.refresh_token) {\n  pm.environment.set('refreshToken', body.refresh_token);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "login"
+              ]
+            },
+            "description": "Public. Exchanges email/password for a fresh access/refresh token pair. Use this on any run after the demo user already exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "const body = pm.response.json();\n\nif (body.access_token) {\n  pm.environment.set('accessToken', body.access_token);\n}\nif (body.refresh_token) {\n  pm.environment.set('refreshToken', body.refresh_token);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Authenticated by the refresh token itself, sent as `refresh_token` in the JSON body (NOT as a Bearer header — this endpoint uses a dedicated refresh-token guard/strategy, mirroring the actual `JwtRefreshStrategy` body-field extractor). Rotation is implemented: the old refresh token is invalidated and both tokens in the environment are replaced with the newly issued pair.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "const body = pm.response.json();\n\nif (body.access_token) {\n  pm.environment.set('accessToken', body.access_token);\n}\nif (body.refresh_token) {\n  pm.environment.set('refreshToken', body.refresh_token);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Protected by the global access-token guard (inherits collection Bearer auth). Returns the normalized `AuthenticatedUser` shape resolved from the access token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Protected. Returns every User (password hashes are never included)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Protected. Fetches a single User by id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Protected. Only `email` is client-mutable. Any authenticated user may update any user record (POC baseline has no per-resource ownership yet).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"updated-demo@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Protected. Permanently deletes the User. CAUTION: this deletes {{userId}} — re-run Register (or Login as a different user) before reusing the rest of the collection if you run this."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () {\n  pm.response.to.have.status(204);\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Programs",
+      "item": [
+        {
+          "name": "Create Program",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/programs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs"
+              ]
+            },
+            "description": "Protected. `totalCapacityUsd` is always USD by definition; `originalCapacity` records the as-originated reference amount/currency. Capacity fields are decimal strings, never JSON numbers, to avoid float precision loss.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Financing Program\",\n  \"originalCapacityAmount\": \"10000.00\",\n  \"originalCapacityCurrency\": \"USD\",\n  \"totalCapacityUsdAmount\": \"10000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\nif (body.id) {\n  pm.environment.set('programId', body.id);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Programs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/programs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs"
+              ]
+            },
+            "description": "Protected. Each Program includes derived `reservedCapacityUsd`/`availableCapacityUsd`, computed from active Reservations, not stored counters."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Program",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/programs/{{programId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs",
+                "{{programId}}"
+              ]
+            },
+            "description": "Protected. Re-run this before and after Create Reservation / Release Reservation to observe `availableCapacityUsd` decrease and then restore."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Program",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/programs/{{programId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs",
+                "{{programId}}"
+              ]
+            },
+            "description": "Protected. Only `name` is client-mutable. `totalCapacityUsd`/`treasuryVersion` are treasury-owned and can only change through reconciliation — sending them here is rejected (400) by the whitelist validation pipeline.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Renamed Demo Program\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Program",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/programs/{{programId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs",
+                "{{programId}}"
+              ]
+            },
+            "description": "Protected. CAUTION: deletes {{programId}}. Do not run this before the Reservations/Releases requests in the chained workflow, or {{programId}} will no longer resolve to anything."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () {\n  pm.response.to.have.status(204);\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Create Invoice (EUR - FX demo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices"
+              ]
+            },
+            "description": "Protected. Non-USD amount: `convertedMoneyUsd` is computed via Frankfurter and snapshotted (rate/rateDate/source) at creation time. Use this Invoice for the Reservations workflow below.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalReference\": \"INV-{{$timestamp}}\",\n  \"amount\": \"100.00\",\n  \"currency\": \"EUR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\nif (body.id) {\n  pm.environment.set('invoiceId', body.id);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Invoice (USD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices"
+              ]
+            },
+            "description": "Protected. USD -> USD always uses rate 1 and never calls Frankfurter. Provided as an easily editable alternative example. NOTE: running this also overwrites {{invoiceId}} — resend \"Create Invoice (EUR - FX demo)\" first if you want to continue the FX-demo workflow afterwards.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalReference\": \"INV-USD-{{$timestamp}}\",\n  \"amount\": \"500.00\",\n  \"currency\": \"USD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\nif (body.id) {\n  pm.environment.set('invoiceId', body.id);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices"
+              ]
+            },
+            "description": "Protected. Lists every Invoice."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}"
+              ]
+            },
+            "description": "Protected. `status` transitions OPEN -> RESERVED -> REPAID as Reservation/Release requests below run."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reservations",
+      "item": [
+        {
+          "name": "Create Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/programs/{{programId}}/reservations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs",
+                "{{programId}}",
+                "reservations"
+              ]
+            },
+            "description": "Protected. Consumes Program capacity using the Invoice's own stored FX conversion (no new FX call happens here). Fails 409 if this would oversubscribe available capacity, or if the Invoice already has an active Reservation. Fails 404 if the Program or Invoice does not exist.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\nif (body.id) {\n  pm.environment.set('reservationId', body.id);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Reservation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservations",
+                "{{reservationId}}"
+              ]
+            },
+            "description": "Protected. Returns the immutable FX snapshot exactly as stored at creation time."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Releases",
+      "item": [
+        {
+          "name": "Release Reservation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservations",
+                "{{reservationId}}",
+                "release"
+              ]
+            },
+            "description": "Protected. Releases exactly the USD amount stored on the Reservation — no new FX conversion occurs, and there is no request body. Marks the Reservation RELEASED and the Invoice REPAID, and restores the exact reserved USD capacity. Idempotent: repeating this call for the same Reservation returns the same Release (201) without double-restoring capacity."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\nif (body.id) {\n  pm.environment.set('releaseId', body.id);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Release",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/releases/{{releaseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "releases",
+                "{{releaseId}}"
+              ]
+            },
+            "description": "Protected. Returns the immutable FX snapshot exactly as stored at creation time."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {\n  pm.response.to.have.status(200);\n});",
+                  "pm.test('Response is JSON', function () {\n  pm.response.to.be.json;\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Failure Scenarios",
+      "description": "A small set of negative-path examples demonstrating enforced invariants. Some of these depend on earlier folders having already run in this environment (e.g. {{programId}}, {{invoiceId}}, {{reservationId}} must already be set).",
+      "item": [
+        {
+          "name": "Protected Endpoint Without Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "No Authorization header sent. Every domain endpoint requires a JWT access token; this must be rejected with 401.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', function () {\n  pm.response.to.have.status(401);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Login (wrong password)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "login"
+              ]
+            },
+            "description": "Wrong password for an existing email. Returns 401 with a response body identical to an unknown-email attempt, so login never leaks which part was wrong.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"DefinitelyWrongPassword1!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', function () {\n  pm.response.to.have.status(401);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Undersized Program (setup for Insufficient Capacity)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/programs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs"
+              ]
+            },
+            "description": "Setup step: creates a Program with only 1.00 USD of total capacity, too small to reserve the Invoice created above against.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Undersized Demo Program\",\n  \"originalCapacityAmount\": \"1.00\",\n  \"originalCapacityCurrency\": \"USD\",\n  \"totalCapacityUsdAmount\": \"1.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\nif (body.id) {\n  pm.environment.set('undersizedProgramId', body.id);\n}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Insufficient Capacity (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/programs/{{undersizedProgramId}}/reservations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs",
+                "{{undersizedProgramId}}",
+                "reservations"
+              ]
+            },
+            "description": "Reserving {{invoiceId}} against the undersized Program above must fail 409 and leave the Invoice OPEN and the Program's reserved capacity untouched. Available capacity must never become negative.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409', function () {\n  pm.response.to.have.status(409);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate Reservation (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/programs/{{programId}}/reservations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "programs",
+                "{{programId}}",
+                "reservations"
+              ]
+            },
+            "description": "Requires \"Create Reservation\" (Reservations folder) to have already run so {{invoiceId}} is RESERVED. The same Invoice must never have more than one active Reservation.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409', function () {\n  pm.response.to.have.status(409);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate Release Is Idempotent (expect 201, same Release id)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reservations",
+                "{{reservationId}}",
+                "release"
+              ]
+            },
+            "description": "Requires \"Release Reservation\" (Releases folder) to have already run. Releasing the same Reservation again must return the same Release (id equals the stored {{releaseId}}), never a second Release or a second capacity restoration."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {\n  pm.response.to.have.status(201);\n});",
+                  "const body = pm.response.json();\n\npm.test('Returns the same Release id as the stored releaseId', function () {\n  pm.expect(body.id).to.eql(pm.environment.get('releaseId'));\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
