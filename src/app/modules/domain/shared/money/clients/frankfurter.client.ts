@@ -18,11 +18,15 @@ export interface FrankfurterRate {
 }
 
 // Frankfurter's actual wire shape - untrusted until validated by parseResponse().
+// GET /v2/rate/{from}/{to} returns a single rate value directly (e.g.
+// {"date":"2026-01-15","base":"EUR","quote":"USD","rate":1.0834}), not a `rates` map -
+// that shape belongs to Frankfurter's /v1 `latest`/`historical` endpoints, which this
+// client does not call.
 interface FrankfurterRateResponse {
-  amount?: unknown;
   base?: unknown;
   date?: unknown;
-  rates?: unknown;
+  quote?: unknown;
+  rate?: unknown;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -104,11 +108,17 @@ export class FrankfurterClient {
       );
     }
 
-    const { base, date, rates } = data;
+    const { base, date, quote, rate } = data;
 
     if (typeof base !== 'string' || base.toUpperCase() !== from.toUpperCase()) {
       throw new InvalidFxRateResponseError(
         `Unexpected base currency in Frankfurter response for ${from}->${to}`,
+      );
+    }
+
+    if (typeof quote !== 'string' || quote.toUpperCase() !== to.toUpperCase()) {
+      throw new InvalidFxRateResponseError(
+        `Unexpected quote currency in Frankfurter response for ${from}->${to}`,
       );
     }
 
@@ -125,18 +135,7 @@ export class FrankfurterClient {
       );
     }
 
-    if (typeof rates !== 'object' || rates === null) {
-      throw new InvalidFxRateResponseError(
-        `Missing rates in Frankfurter response for ${from}->${to}`,
-      );
-    }
-
-    const rateValue = (rates as Record<string, unknown>)[to.toUpperCase()];
-    if (
-      typeof rateValue !== 'number' ||
-      !Number.isFinite(rateValue) ||
-      rateValue <= 0
-    ) {
+    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
       throw new InvalidFxRateResponseError(
         `Missing or invalid rate for ${from}->${to} in Frankfurter response`,
       );
@@ -150,7 +149,7 @@ export class FrankfurterClient {
       // (Number.prototype.toString() uses the shortest round-tripping representation),
       // so this does not reintroduce floating-point error - the multiplication that
       // actually needs BigInt-exact arithmetic happens later, in decimal-math.ts.
-      rate: rateValue.toString(),
+      rate: rate.toString(),
       rateDate,
     };
   }

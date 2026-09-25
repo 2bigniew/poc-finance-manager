@@ -96,8 +96,10 @@ describe('Programs (e2e)', () => {
       amount: '1000.0000',
       currency: 'USD',
     });
-    // Before Reservations exist, all capacity is available (CLAUDE.md Capacity
-    // Response Tests): reservedCapacityUsd = 0, availableCapacityUsd = totalCapacityUsd.
+    // A freshly created Program has no active Reservations against it, so all capacity
+    // is available: reservedCapacityUsd = 0, availableCapacityUsd = totalCapacityUsd
+    // (now derived from real Reservation data via ReservedCapacityPort, not hardcoded -
+    // see programs.service.ts getCapacitySummary()).
     expect(created.reservedCapacityUsd).toEqual({
       amount: '0.0000',
       currency: 'USD',

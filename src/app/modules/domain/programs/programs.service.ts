@@ -1,25 +1,36 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
-import { Money } from '@app/modules/domain/shared/money/money';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Kysely } from 'kysely';
+import { Database } from '@app/modules/database/types/database.interface';
+import {
+  subtractDecimal,
+  USD_DECIMAL_SCALE,
+} from '@app/modules/domain/shared/money/decimal-math';
 import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { InvalidProgramCapacityError } from './exceptions/invalid-program-capacity.error';
 import { ProgramNotFoundError } from './exceptions/program-not-found.error';
 import { Program, ProgramCapacitySummary } from './program.entity';
 import { ProgramsRepository } from './programs.repository';
+import {
+  RESERVED_CAPACITY_PORT,
+  ReservedCapacityPort,
+} from './reserved-capacity.port';
 
 // Mirrors CreateProgramDto's own format check - kept independent so the service still
 // enforces the invariant (BUSINESS.md: "totalCapacityUsd >= 0") for any caller, not only
 // ones that went through HTTP validation.
 const NON_NEGATIVE_DECIMAL_PATTERN = /^\d+(\.\d+)?$/;
 
-const ZERO_USD: Money = { amount: '0.0000', currency: 'USD' };
-
 @Injectable()
 export class ProgramsService {
   private readonly logger = new Logger(ProgramsService.name);
 
-  constructor(private readonly programsRepository: ProgramsRepository) {}
+  constructor(
+    private readonly programsRepository: ProgramsRepository,
+    @Inject(RESERVED_CAPACITY_PORT)
+    private readonly reservedCapacityPort: ReservedCapacityPort,
+  ) {}
 
   async create(dto: CreateProgramDto): Promise<Program> {
     this.assertNonNegativeDecimal(
@@ -86,18 +97,65 @@ export class ProgramsService {
     this.logger.log(`Program deleted: ${id}`);
   }
 
-  // Reservations are not implemented yet (CLAUDE.md Explicit Non-Goals). This is the
-  // seam BUSINESS.md's derived-capacity formula plugs into later:
+  // BUSINESS.md's derived-capacity formula:
   //   reservedCapacityUsd = SUM(active Reservation.convertedMoneyUsd)
   //   availableCapacityUsd = totalCapacityUsd - reservedCapacityUsd
-  // Kept async (even though currently synchronous internally) so this becomes a real
-  // ReservationsRepository sum query later without changing any caller's code
-  // (controllers/DTOs keep their current shape).
-  getCapacitySummary(program: Program): Promise<ProgramCapacitySummary> {
-    return Promise.resolve({
-      reservedCapacityUsd: ZERO_USD,
-      availableCapacityUsd: program.totalCapacityUsd,
-    });
+  // reservedCapacityUsd comes from the real, persisted, ACTIVE Reservations via
+  // ReservedCapacityPort (see reserved-capacity.port.ts for why this is a port rather
+  // than a direct ReservationsModule import) - never hardcoded, never persisted here.
+  async getCapacitySummary(program: Program): Promise<ProgramCapacitySummary> {
+    const reservedCapacityUsd =
+      await this.reservedCapacityPort.sumActiveByProgram(program.id);
+
+    return {
+      reservedCapacityUsd,
+      availableCapacityUsd: {
+        amount: subtractDecimal(
+          program.totalCapacityUsd.amount,
+          reservedCapacityUsd.amount,
+          USD_DECIMAL_SCALE,
+        ),
+        currency: 'USD',
+      },
+    };
+  }
+
+  // Acquires a PostgreSQL row lock via ProgramsRepository.findByIdForUpdate - exposed
+  // here because ProgramsRepository is private to this module (ARCHITECTURE.md); other
+  // modules' capacity-changing transactions (Reservations, and later Release) reuse this
+  // exact locking method rather than re-implementing it (CLAUDE.md: "Do not reimplement
+  // raw Program locking SQL in ReservationsRepository").
+  async findByIdForUpdate(
+    id: string,
+    executor: Kysely<Database>,
+  ): Promise<Program | null> {
+    return this.programsRepository.findByIdForUpdate(id, executor);
+  }
+
+  // Transaction-aware pass-through for Reconciliation's treasury-capacity replacement
+  // (BUSINESS.md Bulk Reconciliation) - ProgramsRepository stays private to this module
+  // (ARCHITECTURE.md), so this is how a caller-owned `trx` participates in the atomic
+  // totalCapacityUsd/treasuryVersion write. Returns null on failure (the guard described
+  // on ProgramsRepository.applyReconciliation) rather than throwing a
+  // Reconciliation-specific error: which typed error is appropriate is the caller's
+  // business decision, not this module's (Programs does not know Reconciliations
+  // exists) - mirrors findByIdForUpdate/the Invoices markReserved convention.
+  async applyReconciliation(
+    id: string,
+    fromTreasuryVersion: number,
+    row: {
+      totalCapacityUsdAmount: string;
+      treasuryVersion: number;
+      updatedAt: Date;
+    },
+    executor: Kysely<Database>,
+  ): Promise<Program | null> {
+    return this.programsRepository.applyReconciliation(
+      id,
+      fromTreasuryVersion,
+      row,
+      executor,
+    );
   }
 
   private assertNonNegativeDecimal(value: string, fieldName: string): void {

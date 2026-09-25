@@ -54,6 +54,9 @@ export const env = cleanEnv(
 
     FRANKFURTER_BASE_URL: url({ default: 'https://api.frankfurter.dev' }),
     HTTP_TIMEOUT_MS: num({ default: 5000 }),
+
+    OUTBOX_BATCH_SIZE: num({ default: 50 }),
+    OUTBOX_POLL_INTERVAL_MS: num({ default: 1000 }),
   },
   { reporter: throwingReporter },
 );

@@ -63,10 +63,10 @@ describe('FrankfurterClient (Axios integration)', () => {
     handler = (req, res) => {
       requestedPath = req.url;
       respondJson(res, 200, {
-        amount: 1,
         base: 'EUR',
+        quote: 'USD',
         date: '2026-01-15',
-        rates: { USD: 1.0834 },
+        rate: 1.0834,
       });
     };
 
@@ -116,10 +116,9 @@ describe('FrankfurterClient (Axios integration)', () => {
   it('maps a response missing the requested rate to InvalidFxRateResponseError', async () => {
     handler = (req, res) => {
       respondJson(res, 200, {
-        amount: 1,
         base: 'EUR',
+        quote: 'USD',
         date: '2026-01-15',
-        rates: {},
       });
     };
 
@@ -131,10 +130,10 @@ describe('FrankfurterClient (Axios integration)', () => {
   it('maps a zero rate to InvalidFxRateResponseError', async () => {
     handler = (req, res) => {
       respondJson(res, 200, {
-        amount: 1,
         base: 'EUR',
+        quote: 'USD',
         date: '2026-01-15',
-        rates: { USD: 0 },
+        rate: 0,
       });
     };
 
@@ -146,10 +145,25 @@ describe('FrankfurterClient (Axios integration)', () => {
   it('maps a response with an unexpected base currency to InvalidFxRateResponseError', async () => {
     handler = (req, res) => {
       respondJson(res, 200, {
-        amount: 1,
         base: 'GBP',
+        quote: 'USD',
         date: '2026-01-15',
-        rates: { USD: 1.2 },
+        rate: 1.2,
+      });
+    };
+
+    await expect(buildClient().getRate('EUR', 'USD')).rejects.toBeInstanceOf(
+      InvalidFxRateResponseError,
+    );
+  });
+
+  it('maps a response with an unexpected quote currency to InvalidFxRateResponseError', async () => {
+    handler = (req, res) => {
+      respondJson(res, 200, {
+        base: 'EUR',
+        quote: 'GBP',
+        date: '2026-01-15',
+        rate: 1.2,
       });
     };
 

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
+import { Kysely } from 'kysely';
+import { Database } from '@app/modules/database/types/database.interface';
 import { CurrencyExchangeService } from '@app/modules/domain/shared/money/currency-exchange.service';
 import { isNonNegativeDecimalString } from '@app/modules/domain/shared/money/decimal-math';
 import { Money } from '@app/modules/domain/shared/money/money';
@@ -70,5 +72,45 @@ export class InvoicesService {
 
   async list(): Promise<Invoice[]> {
     return this.invoicesRepository.list();
+  }
+
+  // Transaction-aware contracts for other modules' capacity-changing transactions
+  // (currently Reservations; later Release) - InvoicesRepository stays private to this
+  // module (ARCHITECTURE.md), so these narrow pass-throughs are how a caller-owned `trx`
+  // participates in an atomic Invoice state transition. Both return null on failure
+  // (not found / precondition not met) rather than throwing a Reservation-specific
+  // error: which typed error is appropriate is the caller's business decision, not
+  // this module's (Invoices does not know Reservations exists).
+  async findByIdForUpdate(
+    id: string,
+    executor: Kysely<Database>,
+  ): Promise<Invoice | null> {
+    return this.invoicesRepository.findByIdForUpdate(id, executor);
+  }
+
+  async markReserved(
+    id: string,
+    executor: Kysely<Database>,
+  ): Promise<Invoice | null> {
+    return this.invoicesRepository.updateStatus(
+      id,
+      'OPEN',
+      'RESERVED',
+      new Date(),
+      executor,
+    );
+  }
+
+  async markRepaid(
+    id: string,
+    executor: Kysely<Database>,
+  ): Promise<Invoice | null> {
+    return this.invoicesRepository.updateStatus(
+      id,
+      'RESERVED',
+      'REPAID',
+      new Date(),
+      executor,
+    );
   }
 }

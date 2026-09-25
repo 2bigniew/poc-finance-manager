@@ -168,4 +168,79 @@ describe('InvoicesRepository Postgres integration', () => {
       code: '23514', // check_violation
     });
   });
+
+  describe('findByIdForUpdate', () => {
+    it('returns the invoice using a caller-supplied transaction executor', async () => {
+      const row = buildInvoiceRow(userId);
+      await repository.create(row);
+
+      const found = await db.transaction().execute(async (trx) => {
+        return repository.findByIdForUpdate(row.id, trx);
+      });
+
+      expect(found?.id).toBe(row.id);
+    });
+
+    it('returns null for a missing invoice', async () => {
+      const found = await db.transaction().execute(async (trx) => {
+        return repository.findByIdForUpdate(randomUUID(), trx);
+      });
+
+      expect(found).toBeNull();
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('transitions status when the current status matches fromStatus', async () => {
+      const row = buildInvoiceRow(userId, { status: 'OPEN' });
+      await repository.create(row);
+      const updatedAt = new Date();
+
+      const updated = await db.transaction().execute(async (trx) => {
+        return repository.updateStatus(
+          row.id,
+          'OPEN',
+          'RESERVED',
+          updatedAt,
+          trx,
+        );
+      });
+
+      expect(updated?.status).toBe('RESERVED');
+      expect(updated?.updatedAt.getTime()).toBe(updatedAt.getTime());
+    });
+
+    it('returns null (no-op) when the current status does not match fromStatus', async () => {
+      const row = buildInvoiceRow(userId, { status: 'RESERVED' });
+      await repository.create(row);
+
+      const updated = await db.transaction().execute(async (trx) => {
+        return repository.updateStatus(
+          row.id,
+          'OPEN',
+          'RESERVED',
+          new Date(),
+          trx,
+        );
+      });
+
+      expect(updated).toBeNull();
+      const stillReserved = await repository.findById(row.id);
+      expect(stillReserved?.status).toBe('RESERVED');
+    });
+
+    it('returns null for a missing invoice', async () => {
+      const updated = await db.transaction().execute(async (trx) => {
+        return repository.updateStatus(
+          randomUUID(),
+          'OPEN',
+          'RESERVED',
+          new Date(),
+          trx,
+        );
+      });
+
+      expect(updated).toBeNull();
+    });
+  });
 });

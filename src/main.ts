@@ -25,5 +25,9 @@ bootstrap().catch((error: unknown) => {
     error instanceof Error ? error.stack : undefined,
     'Bootstrap',
   );
-  process.exitCode = 1;
+  // `process.exitCode = 1` alone does not terminate the process - it only takes effect
+  // once the event loop drains naturally, which open Kafka/PostgreSQL handles can
+  // prevent indefinitely. A bootstrap failure must hard-exit so Docker's restart policy
+  // (or any other orchestrator) can actually detect and recover from it.
+  process.exit(1);
 });

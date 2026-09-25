@@ -11,6 +11,12 @@
 
 const DECIMAL_STRING_PATTERN = /^\d+(\.\d+)?$/;
 
+// Matches the NUMERIC(19,4) precision already established for every money column in the
+// schema (programs/invoices/reservations migrations) - the "existing Money
+// implementation" this project has settled on, rather than a separate per-currency
+// minor-unit table.
+export const USD_DECIMAL_SCALE = 4;
+
 export function isNonNegativeDecimalString(value: string): boolean {
   return DECIMAL_STRING_PATTERN.test(value);
 }
@@ -25,6 +31,48 @@ export function multiplyDecimal(a: string, b: string, scale: number): string {
   const productScale = aScale + bScale;
 
   return scaleBigIntToString(product, productScale, scale);
+}
+
+// Subtracts two exact non-negative decimal strings (a - b) and rounds to `scale` decimal
+// places. Throws RangeError if the result would be negative: for this project's only use
+// (available capacity = total - reserved), a negative result means the oversubscription
+// invariant was already violated elsewhere, which is a bug worth surfacing loudly rather
+// than silently clamping to zero.
+export function subtractDecimal(a: string, b: string, scale: number): string {
+  const [aDigits, aScale] = toDigitsWithScale(a);
+  const [bDigits, bScale] = toDigitsWithScale(b);
+  const commonScale = Math.max(aScale, bScale, scale);
+
+  const aScaled = aDigits * 10n ** BigInt(commonScale - aScale);
+  const bScaled = bDigits * 10n ** BigInt(commonScale - bScale);
+  const difference = aScaled - bScaled;
+
+  if (difference < 0n) {
+    throw new RangeError(
+      `subtractDecimal: result of ${a} - ${b} would be negative`,
+    );
+  }
+
+  return scaleBigIntToString(difference, commonScale, scale);
+}
+
+// Compares two exact non-negative decimal strings without ever converting either to a
+// JavaScript number. Returns -1 if a < b, 0 if equal, 1 if a > b.
+export function compareDecimalStrings(a: string, b: string): -1 | 0 | 1 {
+  const [aDigits, aScale] = toDigitsWithScale(a);
+  const [bDigits, bScale] = toDigitsWithScale(b);
+  const commonScale = Math.max(aScale, bScale);
+
+  const aScaled = aDigits * 10n ** BigInt(commonScale - aScale);
+  const bScaled = bDigits * 10n ** BigInt(commonScale - bScale);
+
+  if (aScaled < bScaled) {
+    return -1;
+  }
+  if (aScaled > bScaled) {
+    return 1;
+  }
+  return 0;
 }
 
 function toDigitsWithScale(value: string): [bigint, number] {

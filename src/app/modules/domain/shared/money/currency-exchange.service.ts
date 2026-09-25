@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { FrankfurterClient } from './clients/frankfurter.client';
-import { isNonNegativeDecimalString, multiplyDecimal } from './decimal-math';
+import {
+  isNonNegativeDecimalString,
+  multiplyDecimal,
+  USD_DECIMAL_SCALE,
+} from './decimal-math';
 import { InvalidMoneyAmountError } from './exceptions/invalid-money-amount.error';
 import { UnsupportedCurrencyError } from './exceptions/unsupported-currency.error';
 import { Money } from './money';
@@ -8,10 +12,6 @@ import { MoneyConversion } from './money-conversion';
 
 const USD = 'USD';
 const CURRENCY_CODE_PATTERN = /^[A-Z]{3}$/;
-// Matches the NUMERIC(19,4) precision already established for every money column
-// (see the programs/invoices migrations) - the "existing Money implementation" this
-// project has settled on, rather than a separate per-currency minor-unit table.
-const USD_DECIMAL_SCALE = 4;
 
 @Injectable()
 export class CurrencyExchangeService {

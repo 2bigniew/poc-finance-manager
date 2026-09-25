@@ -30,6 +30,12 @@ describe('ProgramsService', () => {
     update: jest.Mock<Promise<unknown>, [string, Record<string, unknown>]>;
     delete: jest.Mock;
   };
+  let reservedCapacityPort: {
+    sumActiveByProgram: jest.Mock<
+      Promise<{ amount: string; currency: string }>,
+      [string]
+    >;
+  };
 
   beforeEach(() => {
     programsRepository = {
@@ -40,9 +46,15 @@ describe('ProgramsService', () => {
       update: jest.fn<Promise<unknown>, [string, Record<string, unknown>]>(),
       delete: jest.fn(),
     };
+    reservedCapacityPort = {
+      sumActiveByProgram: jest
+        .fn<Promise<{ amount: string; currency: string }>, [string]>()
+        .mockResolvedValue({ amount: '0.0000', currency: 'USD' }),
+    };
 
     service = new ProgramsService(
       programsRepository as unknown as ProgramsRepository,
+      reservedCapacityPort,
     );
   });
 
@@ -241,13 +253,20 @@ describe('ProgramsService', () => {
   });
 
   describe('getCapacitySummary', () => {
-    it('returns zero reserved and full available capacity before Reservations exist', async () => {
+    it('returns zero reserved and full available capacity when there are no active reservations', async () => {
       const program = buildProgram({
         totalCapacityUsd: { amount: '1000.0000', currency: 'USD' },
+      });
+      reservedCapacityPort.sumActiveByProgram.mockResolvedValue({
+        amount: '0.0000',
+        currency: 'USD',
       });
 
       const summary = await service.getCapacitySummary(program);
 
+      expect(reservedCapacityPort.sumActiveByProgram).toHaveBeenCalledWith(
+        program.id,
+      );
       expect(summary.reservedCapacityUsd).toEqual({
         amount: '0.0000',
         currency: 'USD',
@@ -256,6 +275,63 @@ describe('ProgramsService', () => {
         amount: '1000.0000',
         currency: 'USD',
       });
+    });
+
+    it('derives availableCapacityUsd as totalCapacityUsd minus the real active-reservation sum', async () => {
+      const program = buildProgram({
+        totalCapacityUsd: { amount: '1000.0000', currency: 'USD' },
+      });
+      reservedCapacityPort.sumActiveByProgram.mockResolvedValue({
+        amount: '300.0000',
+        currency: 'USD',
+      });
+
+      const summary = await service.getCapacitySummary(program);
+
+      expect(summary.reservedCapacityUsd).toEqual({
+        amount: '300.0000',
+        currency: 'USD',
+      });
+      expect(summary.availableCapacityUsd).toEqual({
+        amount: '700.0000',
+        currency: 'USD',
+      });
+    });
+
+    it('reports exactly zero available capacity when fully reserved', async () => {
+      const program = buildProgram({
+        totalCapacityUsd: { amount: '100.0000', currency: 'USD' },
+      });
+      reservedCapacityPort.sumActiveByProgram.mockResolvedValue({
+        amount: '100.0000',
+        currency: 'USD',
+      });
+
+      const summary = await service.getCapacitySummary(program);
+
+      expect(summary.availableCapacityUsd).toEqual({
+        amount: '0.0000',
+        currency: 'USD',
+      });
+    });
+  });
+
+  describe('findByIdForUpdate', () => {
+    it('delegates to ProgramsRepository.findByIdForUpdate with the given executor', async () => {
+      const program = buildProgram();
+      programsRepository.findByIdForUpdate.mockResolvedValue(program);
+      const executor = { marker: 'trx' };
+
+      const result = await service.findByIdForUpdate(
+        program.id,
+        executor as never,
+      );
+
+      expect(programsRepository.findByIdForUpdate).toHaveBeenCalledWith(
+        program.id,
+        executor,
+      );
+      expect(result).toBe(program);
     });
   });
 });

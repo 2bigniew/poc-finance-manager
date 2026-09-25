@@ -21,6 +21,12 @@ interface UpdateProgramRow {
   updatedAt: Date;
 }
 
+interface ApplyReconciliationRow {
+  totalCapacityUsdAmount: string;
+  treasuryVersion: number;
+  updatedAt: Date;
+}
+
 @Injectable()
 export class ProgramsRepository {
   constructor(
@@ -74,6 +80,31 @@ export class ProgramsRepository {
       .executeTakeFirst();
 
     return row ? this.toEntity(row) : null;
+  }
+
+  // Treasury-owned capacity replacement (BUSINESS.md Bulk Reconciliation: "replace
+  // treasury-owned totalCapacityUsd, set treasuryVersion"). The executor is REQUIRED:
+  // callers MUST already hold the row lock via findByIdForUpdate in the same
+  // transaction (CLAUDE.md: "Program is locked before capacity-affecting state
+  // changes"). `fromTreasuryVersion` guards the UPDATE with `WHERE treasury_version = ?`
+  // as a defensive backstop on top of the caller's lock+revalidate step - mirrors
+  // InvoicesRepository/ReservationsRepository.updateStatus's `WHERE status =
+  // fromStatus` convention, just keyed on treasuryVersion instead of a status enum.
+  async applyReconciliation(
+    id: string,
+    fromTreasuryVersion: number,
+    row: ApplyReconciliationRow,
+    executor: Kysely<Database>,
+  ): Promise<Program | null> {
+    const updated = await executor
+      .updateTable('programs')
+      .set(row)
+      .where('id', '=', id)
+      .where('treasuryVersion', '=', fromTreasuryVersion)
+      .returningAll()
+      .executeTakeFirst();
+
+    return updated ? this.toEntity(updated) : null;
   }
 
   async list(executor: Kysely<Database> = this.db): Promise<Program[]> {
